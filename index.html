@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donka Gambler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --cy-green: #00ff66;
+            --cy-pink: #ff007f;
+            --cy-blue: #00f3ff;
+            --cy-purple: #bd00ff;
+            --cy-yellow: #fcee0a;
+            --bg-dark: #050505;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            overflow-x: hidden;
+            margin: 0;
+            user-select: none;
+        }
+
+        .font-mono { font-family: 'Share Tech Mono', monospace; }
+
+        /* Matrix Canvas Background */
+        #matrix-bg {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -2; opacity: 0.2; pointer-events: none;
+        }
+        .grid-overlay {
+            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background-image: 
+                linear-gradient(rgba(0, 255, 102, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 102, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.5); }
+        ::-webkit-scrollbar-thumb { background: var(--cy-green); border-radius: 3px; }
+
+        /* Glassmorphism Panels */
+        .glass {
+            background: rgba(10, 10, 12, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 255, 102, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.9), inset 0 0 15px rgba(0, 255, 102, 0.05);
+            border-radius: 12px;
+        }
+
+        .text-glow-green { color: var(--cy-green); text-shadow: 0 0 10px var(--cy-green); }
+        .text-glow-pink { color: var(--cy-pink); text-shadow: 0 0 10px var(--cy-pink); }
+        .text-glow-yellow { color: var(--cy-yellow); text-shadow: 0 0 15px var(--cy-yellow); }
+
+        /* Visual Effects */
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            10% { transform: translate(-15px, -15px) rotate(-2deg); filter: contrast(2) hue-rotate(-90deg); }
+            20% { transform: translate(-20px, 0px) rotate(2deg); }
+            30% { transform: translate(20px, 15px) rotate(0deg); }
+            40% { transform: translate(15px, -15px) rotate(2deg); filter: contrast(1.5) hue-rotate(90deg); }
+            50% { transform: translate(-15px, 20px) rotate(-1deg); }
+            60% { transform: translate(-20px, 15px) rotate(0deg); }
+            70% { transform: translate(20px, 2px) rotate(-1deg); }
+            80% { transform: translate(-15px, -15px) rotate(1deg); }
+            90% { transform: translate(15px, 20px) rotate(0deg); }
+        }
+        .anim-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+
+        @keyframes flashWin {
+            0% { opacity: 0; background: transparent; }
+            5% { opacity: 1; background: rgba(0, 255, 102, 0.8); box-shadow: inset 0 0 200px var(--cy-yellow); }
+            15% { background: #fff; }
+            100% { opacity: 0; background: transparent; }
+        }
+        .flash-overlay {
+            position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+            animation: flashWin 0.7s ease-out forwards;
+        }
+
+        /* Buttons & Inputs */
+        input[type="text"] {
+            background: transparent;
+            color: #fff;
+            outline: none;
+            width: 100%;
+        }
+
+        .btn-base {
+            transition: all 0.2s;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+        .btn-primary {
+            background: rgba(0, 255, 102, 0.1); border: 2px solid var(--cy-green); color: var(--cy-green);
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: rgba(0, 255, 102, 0.2); box-shadow: 0 0 30px rgba(0, 255, 102, 0.5);
+            text-shadow: 0 0 10px var(--cy-green); transform: translateY(-2px);
+        }
+        .btn-primary:disabled { border-color: #333; color: #555; background: transparent; cursor: not-allowed; }
+
+        .btn-action {
+            background: rgba(0, 243, 255, 0.1); border: 1px solid var(--cy-blue); color: var(--cy-blue);
+        }
+        .btn-action:hover:not(:disabled) { box-shadow: 0 0 15px rgba(0, 243, 255, 0.4); }
+        .btn-action:disabled { opacity: 0.4; cursor: not-allowed; border-color: #444; color: #666; }
+
+        /* Multiplier Buttons */
+        .btn-mult {
+            background: #111; border: 1px solid #333; color: #888;
+        }
+        .btn-mult.active {
+            background: var(--cy-purple); border-color: var(--cy-purple); color: #fff;
+            box-shadow: 0 0 15px var(--cy-purple);
+        }
+
+        /* Stock Markets */
+        .stock-moon { background: rgba(0, 255, 102, 0.2) !important; border-color: var(--cy-green) !important; animation: moonPulse 0.2s infinite alternate; }
+        @keyframes moonPulse { to { box-shadow: inset 0 0 40px var(--cy-green); transform: scale(1.02); } }
+        .stock-crash { animation: crashFlash 1s forwards; }
+        @keyframes crashFlash { 0% { background: rgba(255,0,127,0.5); border-color: var(--cy-pink); } 100% { background: rgba(0,0,0,0.5); border-color: #333; } }
+
+        /* Whack-a-Mole Side Quest */
+        .mole-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 300px; margin: 0 auto; }
+        .mole-hole { aspect-ratio: 1; background: rgba(255,255,255,0.05); border: 2px solid #333; border-radius: 10px; cursor: pointer; transition: all 0.1s; display: flex; align-items: center; justify-content: center; }
+        .mole-hole.active { background: var(--cy-yellow); border-color: #fff; box-shadow: 0 0 30px var(--cy-yellow); transform: scale(1.05); }
+    </style>
+</head>
+<body id="app-body" class="flex flex-col items-center p-4">
+
+    <!-- FX -->
+    <canvas id="matrix-bg"></canvas>
+    <div class="grid-overlay"></div>
+    <div id="effects-container"></div>
+
+    <!-- Header -->
+    <header class="w-full max-w-7xl flex flex-col md:flex-row justify-between items-center mb-6 gap-4 z-10 relative">
+        <div class="flex items-center gap-4">
+            <h1 class="text-3xl md:text-5xl font-black tracking-widest uppercase">
+                <span class="text-glow-green">DONKA</span> <span class="text-white">GAMBLER</span>
+            </h1>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <button id="btn-side-quest" onclick="openSideQuest()" class="hidden btn-base btn-action border-[var(--cy-yellow)] text-[var(--cy-yellow)] px-6 py-2 font-bold animate-pulse shadow-[0_0_15px_var(--cy-yellow)]">
+                [ SIDE QUEST ]
+            </button>
+
+            <div class="glass px-6 py-3 flex flex-col items-end border-b-4 border-b-[var(--cy-green)] min-w-[200px]">
+                <p class="text-[10px] text-gray-400 uppercase tracking-widest font-mono mb-1">Balance</p>
+                <div class="flex items-center gap-2">
+                    <span class="text-xl text-[var(--cy-yellow)]">🪙</span>
+                    <span class="text-3xl font-mono font-bold text-white tracking-tight" id="ui-coins">100</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
+        
+        <!-- Left: Bet Engine, Upgrades, Title Shop -->
+        <div class="lg:col-span-4 flex flex-col gap-6">
+            
+            <!-- Betting Panel -->
+            <section class="glass p-6">
+                <h2 class="text-xl font-bold tracking-widest text-[var(--cy-green)] border-b border-white/10 pb-2 mb-4">
+                    BETTING ENGINE
+                </h2>
+                
+                <div class="bg-black/50 border border-[#333] rounded-lg p-4 mb-4">
+                    <label class="text-xs text-gray-400 uppercase tracking-widest block mb-2 font-mono">Amount (e.g. 1k, 1.5m, 2b)</label>
+                    <div class="flex items-center mb-4 border-b border-white/20 pb-2">
+                        <span class="text-[var(--cy-green)] text-xl mr-2 font-mono">></span>
+                        <input type="text" id="input-bet" value="10" class="text-3xl font-mono text-white" placeholder="0">
+                    </div>
+                    
+                    <label class="text-[10px] text-gray-500 uppercase tracking-widest block mb-2 font-mono">Multiplier</label>
+                    <div class="grid grid-cols-5 gap-2 mb-2" id="mult-container">
+                        <button class="btn-base btn-mult active py-2 text-xs font-bold" data-mult="1">1x</button>
+                        <button class="btn-base btn-mult py-2 text-xs font-bold" data-mult="2">2x</button>
+                        <button class="btn-base btn-mult py-2 text-xs font-bold" data-mult="3">3x</button>
+                        <button class="btn-base btn-mult py-2 text-xs font-bold" data-mult="4">4x</button>
+                        <button class="btn-base btn-mult py-2 text-xs font-bold" data-mult="10">10x</button>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-end mb-6 font-mono bg-black/40 p-3 rounded border border-[#222]">
+                    <div>
+                        <p class="text-[10px] text-gray-400">WIN CHANCE</p>
+                        <p class="text-xl font-bold text-glow-green" id="ui-win-chance">50%</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] text-gray-400">TOTAL RISK</p>
+                        <p class="text-xl font-bold text-white" id="ui-total-risk">10</p>
+                    </div>
+                </div>
+                
+                <button id="btn-gamble" class="btn-base btn-primary w-full text-2xl font-black tracking-widest py-4">
+                    GAMBLE
+                </button>
+            </section>
+
+            <!-- Upgrades Panel -->
+            <section class="glass p-6">
+                <h2 class="text-xl font-bold tracking-widest text-[var(--cy-blue)] border-b border-white/10 pb-2 mb-4">
+                    UPGRADES
+                </h2>
+
+                <div class="bg-black/50 border border-[#333] rounded-lg p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="font-bold text-white tracking-wider text-sm">Upgrade Base Luck</h3>
+                        <span id="ui-luck-status" class="text-[var(--cy-blue)] text-xs font-mono">50%</span>
+                    </div>
+                    <p class="text-xs text-gray-400 font-mono mb-4">+1% Base Win Chance. Max 70%.</p>
+                    
+                    <button id="btn-upgrade" class="btn-base btn-action w-full py-3 flex justify-between items-center px-4 font-mono font-bold">
+                        <span>PURCHASE</span>
+                        <span class="text-white" id="ui-upgrade-cost">Cost: 1,000</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Title Shop Panel -->
+            <section class="glass p-6">
+                <h2 class="text-xl font-bold tracking-widest text-[var(--cy-pink)] border-b border-white/10 pb-2 mb-4">
+                    TITLE SHOP
+                </h2>
+                <div class="flex flex-col gap-2" id="titles-container">
+                    <!-- Titles injected here -->
+                </div>
+            </section>
+        </div>
+
+        <!-- Middle: Shares Investment -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+            <section class="glass p-6 flex flex-col h-full relative">
+                <div class="flex justify-between items-center border-b border-white/10 pb-2 mb-4">
+                    <h2 class="text-xl font-bold tracking-widest text-[var(--cy-yellow)]">
+                        SHARES INVESTMENT
+                    </h2>
+                    <div class="flex items-center gap-2 font-mono text-[10px] text-gray-400">
+                        <span>UPDATING</span>
+                        <span class="w-2 h-2 bg-[var(--cy-yellow)] rounded-full animate-ping"></span>
+                    </div>
+                </div>
+                
+                <div class="bg-black/40 border border-white/5 rounded-lg p-3 mb-4 flex justify-between items-center">
+                    <span class="text-xs font-mono text-gray-400 uppercase tracking-widest">Portfolio Value:</span>
+                    <span class="text-xl font-mono font-bold text-glow-green" id="ui-portfolio-val">0</span>
+                </div>
+
+                <div class="flex-1 space-y-3 overflow-y-auto pr-2" id="market-container">
+                    <!-- Market injected here -->
+                </div>
+            </section>
+        </div>
+
+        <!-- Right: Quests & Logs -->
+        <div class="lg:col-span-3 flex flex-col gap-6">
+            
+            <!-- Quests -->
+            <section class="glass p-5 flex flex-col max-h-[400px]">
+                <h2 class="text-sm font-bold tracking-widest text-gray-300 border-b border-white/10 pb-2 mb-3">
+                    QUESTS (MILESTONES)
+                </h2>
+                <div class="flex-1 overflow-y-auto pr-1 space-y-2 font-mono text-xs" id="quests-container"></div>
+            </section>
+
+            <!-- Activity Log -->
+            <section class="glass p-5 flex flex-col flex-1 min-h-[200px]">
+                <h2 class="text-sm font-bold tracking-widest text-gray-300 border-b border-white/10 pb-2 mb-3">
+                    ACTIVITY LOG
+                </h2>
+                <div class="flex-1 overflow-y-auto bg-black/80 rounded border border-white/10 p-2 font-mono text-[10px] space-y-1" id="history-container">
+                    <div class="text-[var(--cy-green)]">Donka System Online.</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Side Quest Modal -->
+    <div id="quest-modal" class="fixed inset-0 bg-black/90 z-[100] hidden flex flex-col items-center justify-center backdrop-blur-md">
+        <div class="w-full max-w-md glass border-[var(--cy-yellow)] p-8 relative text-center">
+            <h2 class="text-3xl font-black text-glow-yellow tracking-widest mb-2">SYSTEM REBOOT</h2>
+            <p class="text-gray-400 font-mono text-sm mb-6">Hit the yellow node 5 times quickly to restore emergency funds!</p>
+            
+            <div class="mole-grid mb-6" id="mole-grid">
+                <div class="mole-hole" data-idx="0"></div><div class="mole-hole" data-idx="1"></div><div class="mole-hole" data-idx="2"></div>
+                <div class="mole-hole" data-idx="3"></div><div class="mole-hole" data-idx="4"></div><div class="mole-hole" data-idx="5"></div>
+                <div class="mole-hole" data-idx="6"></div><div class="mole-hole" data-idx="7"></div><div class="mole-hole" data-idx="8"></div>
+            </div>
+
+            <p id="mole-status" class="text-xl font-mono text-white mb-4">Hits: <span id="mole-score">0</span>/5</p>
+            
+            <button id="btn-start-mole" onclick="startMoleGame()" class="btn-base btn-action px-8 py-3 font-bold border-[var(--cy-yellow)] text-[var(--cy-yellow)] w-full">
+                START REBOOT
+            </button>
+        </div>
+    </div>
+
+    <!-- Logic -->
+    <script>
+        // --- Web Audio API Synth (Retro Sounds) ---
+        let audioCtx;
+        function initAudio() {
+            if(!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playTone(freq, type, duration, vol=0.1) {
+            if(!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playSound(event) {
+            initAudio();
+            if(event === 'win') {
+                // Happy ascending beep
+                playTone(400, 'square', 0.1);
+                setTimeout(() => playTone(600, 'square', 0.2), 100);
+                setTimeout(() => playTone(800, 'square', 0.3), 200);
+            } else if (event === 'lose') {
+                // Sad descending boop
+                playTone(300, 'sawtooth', 0.15);
+                setTimeout(() => playTone(200, 'sawtooth', 0.3), 150);
+            } else if (event === 'claim') {
+                // Triumphant arpeggio
+                playTone(523.25, 'sine', 0.1); // C5
+                setTimeout(() => playTone(659.25, 'sine', 0.1), 100); // E5
+                setTimeout(() => playTone(783.99, 'sine', 0.1), 200); // G5
+                setTimeout(() => playTone(1046.50, 'sine', 0.4), 300); // C6
+            }
+        }
+
+        // Add interaction listener to initialize audio
+        document.body.addEventListener('click', initAudio, { once: true });
+
+        // --- Parsing & Formatting ---
+        const suffixes = { k: 1e3, m: 1e6, b: 1e9, t: 1e12, qd: 1e15, qn: 1e18 };
+        
+        function parseInput(valStr) {
+            if(!valStr) return 0;
+            valStr = valStr.toString().toLowerCase().replace(/,/g, '').trim();
+            const match = valStr.match(/^([\d.]+)([kmbtqdn]*)$/);
+            if(!match) return Math.max(0, parseFloat(valStr) || 0);
+            
+            const num = parseFloat(match[1]);
+            const suffix = match[2];
+            return suffix && suffixes[suffix] ? num * suffixes[suffix] : num;
+        }
+
+        function formatCoins(num) {
+            if (num >= 1e18) return (num / 1e18).toFixed(2) + ' QN';
+            if (num >= 1e15) return (num / 1e15).toFixed(2) + ' QD';
+            if (num >= 1e12) return (num / 1e12).toFixed(2) + ' T';
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + ' B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + ' M';
+            if (num >= 1e3) return (num / 1e3).toFixed(2) + ' K';
+            return Math.floor(num).toLocaleString();
+        }
+
+        // --- State ---
+        let state = {
+            coins: 100,
+            winChance: 50,
+            maxWinChance: 70, // Max base luck is now 70%
+            multiplier: 1,
+            titles: [
+                { id: 'beginner', name: 'Beginner', cost: 1e3, owned: false },
+                { id: 'pro', name: 'Pro', cost: 1e6, owned: false },
+                { id: 'god', name: 'God of Money', cost: 1e9, owned: false }
+            ],
+            equippedTitle: null,
+            quests: [
+                { target: 1e3, reward: 500, title: "1K Coins", claimed: false, canClaim: false },
+                { target: 1e4, reward: 5000, title: "10K Coins", claimed: false, canClaim: false },
+                { target: 1e5, reward: 50000, title: "100K Coins", claimed: false, canClaim: false },
+                { target: 1e6, reward: 5e5, title: "1M Coins", claimed: false, canClaim: false },
+                { target: 1e7, reward: 5e6, title: "10M Coins", claimed: false, canClaim: false },
+                { target: 1e8, reward: 5e7, title: "100M Coins", claimed: false, canClaim: false },
+                { target: 1e9, reward: 5e8, title: "1B Coins", claimed: false, canClaim: false },
+                { target: 1e12, reward: 5e11, title: "1T Coins", claimed: false, canClaim: false },
+                { target: 1e13, reward: 5e12, title: "10T Coins", claimed: false, canClaim: false }
+            ],
+            market: {
+                bmw: { id: 'bmw', name: 'BMW Auto', base: 50, price: 50, owned: 0, isMooning: false, crashed: false },
+                tech: { id: 'tech', name: 'TechCorp', base: 300, price: 300, owned: 0, isMooning: false, crashed: false },
+                dnk: { id: 'dnk', name: 'DonkaCoin', base: 1000, price: 1000, owned: 0, isMooning: false, crashed: false }
+            }
+        };
+
+        function getEffectiveChance() {
+            let chance = state.winChance;
+            if (state.equippedTitle) {
+                chance += 5; // Equipped title adds exactly 5%
+            }
+            return chance;
+        }
+
+        // --- DOM Elements ---
+        const uiCoins = document.getElementById('ui-coins');
+        const inputBet = document.getElementById('input-bet');
+        const uiWinChance = document.getElementById('ui-win-chance');
+        const uiTotalRisk = document.getElementById('ui-total-risk');
+        const uiLuckStatus = document.getElementById('ui-luck-status');
+        const uiUpgradeCost = document.getElementById('ui-upgrade-cost');
+        const btnGamble = document.getElementById('btn-gamble');
+        const btnUpgrade = document.getElementById('btn-upgrade');
+        const btnSideQuest = document.getElementById('btn-side-quest');
+        const titlesContainer = document.getElementById('titles-container');
+        const marketContainer = document.getElementById('market-container');
+        const questsContainer = document.getElementById('quests-container');
+        const historyContainer = document.getElementById('history-container');
+        const effectsContainer = document.getElementById('effects-container');
+        const multBtns = document.querySelectorAll('.btn-mult');
+
+        // --- Core Functions ---
+        function addLog(msg, type = 'info') {
+            const div = document.createElement('div');
+            let color = 'text-gray-400';
+            if(type === 'win') color = 'text-[var(--cy-green)]';
+            if(type === 'lose') color = 'text-[var(--cy-pink)]';
+            if(type === 'sys') color = 'text-[var(--cy-blue)]';
+            
+            div.className = `border-b border-white/5 pb-1 ${color}`;
+            div.innerHTML = `<span class="opacity-50">[${new Date().toLocaleTimeString('en-US',{hour12:false})}]</span> ${msg}`;
+            historyContainer.prepend(div);
+            if(historyContainer.children.length > 50) historyContainer.lastChild.remove();
+        }
+
+        function triggerVisual(type) {
+            if (type === 'win') {
+                const flash = document.createElement('div');
+                flash.className = 'flash-overlay';
+                effectsContainer.appendChild(flash);
+                setTimeout(() => flash.remove(), 700);
+            } else if (type === 'lose') {
+                document.body.classList.remove('anim-shake');
+                void document.body.offsetWidth;
+                document.body.classList.add('anim-shake');
+            }
+        }
+
+        // Multiplier Selection
+        multBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                multBtns.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                state.multiplier = parseInt(e.target.getAttribute('data-mult'));
+                updateUI();
+            });
+        });
+
+        function resetMultiplier() {
+            state.multiplier = 1;
+            multBtns.forEach(b => b.classList.remove('active'));
+            multBtns[0].classList.add('active');
+            updateUI();
+        }
+
+        // Betting Logic
+        inputBet.addEventListener('input', updateUI);
+
+        btnGamble.addEventListener('click', () => {
+            initAudio();
+            const baseBet = parseInput(inputBet.value);
+            const totalBet = baseBet * state.multiplier;
+            
+            if (totalBet <= 0 || totalBet > state.coins) return;
+
+            const effectiveChance = getEffectiveChance();
+            const roll = Math.random() * 100;
+            const isWin = roll < effectiveChance;
+
+            if (isWin) {
+                state.coins += totalBet; // Profit equals bet
+                addLog(`Won! +${formatCoins(totalBet)} Coins.`, 'win');
+                playSound('win');
+                triggerVisual('win');
+            } else {
+                state.coins -= totalBet;
+                addLog(`Lost! -${formatCoins(totalBet)} Coins.`, 'lose');
+                playSound('lose');
+                triggerVisual('lose');
+                resetMultiplier(); // Crucial requirement
+            }
+            
+            checkQuests();
+            updateUI();
+        });
+
+        // Upgrades
+        function getUpgradeCost() {
+            const upgradesDone = state.winChance - 50;
+            return Math.floor(500 * Math.pow(1.5, upgradesDone));
+        }
+
+        btnUpgrade.addEventListener('click', () => {
+            initAudio();
+            const cost = getUpgradeCost();
+            if (state.coins >= cost && state.winChance < state.maxWinChance) {
+                state.coins -= cost;
+                state.winChance += 1;
+                addLog(`Upgraded Base Luck to ${state.winChance}%.`, 'sys');
+                updateUI();
+            }
+        });
+
+        // Title Shop
+        function renderTitles() {
+            titlesContainer.innerHTML = '';
+            state.titles.forEach(t => {
+                const isEquipped = state.equippedTitle === t.id;
+                
+                let btnHtml = '';
+                if (t.owned) {
+                    btnHtml = `<button onclick="equipTitle('${t.id}')" class="btn-base px-3 py-1 text-xs font-bold ${isEquipped ? 'bg-[var(--cy-purple)] text-white' : 'btn-mult hover:text-white'}">${isEquipped ? 'EQUIPPED' : 'EQUIP'}</button>`;
+                } else {
+                    btnHtml = `<button onclick="buyTitle('${t.id}')" class="btn-base btn-action px-3 py-1 text-xs font-bold" ${state.coins < t.cost ? 'disabled' : ''}>BUY: ${formatCoins(t.cost)}</button>`;
+                }
+
+                const div = document.createElement('div');
+                div.className = `flex justify-between items-center bg-black/50 border ${isEquipped ? 'border-[var(--cy-purple)]' : 'border-[#333]'} p-3 rounded-lg`;
+                div.innerHTML = `
+                    <div>
+                        <div class="font-bold text-sm ${isEquipped ? 'text-[var(--cy-purple)]' : 'text-white'}">${t.name}</div>
+                        <div class="text-[10px] text-[var(--cy-purple)]">+5% Luck</div>
+                    </div>
+                    <div>${btnHtml}</div>
+                `;
+                titlesContainer.appendChild(div);
+            });
+        }
+
+        window.buyTitle = function(id) {
+            initAudio();
+            const title = state.titles.find(t => t.id === id);
+            if (title && !title.owned && state.coins >= title.cost) {
+                state.coins -= title.cost;
+                title.owned = true;
+                addLog(`Bought Title: ${title.name}`, 'sys');
+                updateUI();
+            }
+        };
+
+        window.equipTitle = function(id) {
+            initAudio();
+            if (state.equippedTitle === id) {
+                state.equippedTitle = null; // Unequip if already equipped
+            } else {
+                state.equippedTitle = id;
+            }
+            updateUI();
+        };
+
+        // Quests
+        function checkQuests() {
+            state.quests.forEach(q => {
+                if (!q.claimed && !q.canClaim && state.coins >= q.target) {
+                    q.canClaim = true;
+                    addLog(`Milestone Reached: ${q.title}! Claim your reward.`, 'sys');
+                    renderQuests();
+                }
+            });
+        }
+
+        window.claimQuest = function(index) {
+            initAudio();
+            const q = state.quests[index];
+            if(q && q.canClaim && !q.claimed) {
+                q.claimed = true;
+                q.canClaim = false;
+                state.coins += q.reward;
+                playSound('claim');
+                addLog(`Claimed Quest: ${q.title} (+${formatCoins(q.reward)} Coins)`, 'win');
+                triggerVisual('win');
+                renderQuests();
+                updateUI();
+            }
+        }
+
+        function renderQuests() {
+            questsContainer.innerHTML = '';
+            state.quests.forEach((q, i) => {
+                const div = document.createElement('div');
+                let style = 'border-white/10 bg-black/40 text-gray-400';
+                let btnHtml = '';
+
+                if (q.claimed) {
+                    style = 'border-[var(--cy-green)] text-[var(--cy-green)] opacity-50';
+                    btnHtml = `<span class="text-xs">[CLAIMED]</span>`;
+                } else if (q.canClaim) {
+                    style = 'border-[var(--cy-yellow)] bg-[var(--cy-yellow)]/10 text-white';
+                    btnHtml = `<button onclick="claimQuest(${i})" class="bg-[var(--cy-yellow)] text-black px-2 py-1 rounded text-xs font-bold hover:bg-white animate-pulse">CLAIM</button>`;
+                }
+
+                div.className = `p-2 rounded border flex justify-between items-center ${style}`;
+                div.innerHTML = `
+                    <div>
+                        <strong>${q.title}</strong>
+                        <div class="text-[10px] opacity-70">Reward: ${formatCoins(q.reward)}</div>
+                    </div>
+                    <div>${btnHtml}</div>
+                `;
+                questsContainer.appendChild(div);
+            });
+        }
+
+        // Shares Investment (Stock Market)
+        function renderMarket() {
+            marketContainer.innerHTML = '';
+            let portVal = 0;
+            
+            Object.values(state.market).forEach(s => {
+                const val = s.price * s.owned;
+                portVal += val;
+                
+                let fxClass = '';
+                if(s.isMooning) fxClass = 'stock-moon';
+                if(s.crashed) fxClass = 'stock-crash';
+
+                const div = document.createElement('div');
+                div.className = `p-3 rounded border bg-black/50 ${fxClass} ${s.isMooning ? '' : 'border-white/10 hover:border-white/20'}`;
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <div class="font-bold tracking-wider text-white">${s.name}</div>
+                        <div class="text-lg font-mono ${s.isMooning ? 'text-[var(--cy-yellow)]' : 'text-[var(--cy-green)]'}">
+                            ${formatCoins(s.price)}
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <div class="text-[10px] font-mono text-gray-400">
+                            Shares: <span class="text-white">${formatCoins(s.owned)}</span><br>Val: ${formatCoins(val)}
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="trade('${s.id}', 1)" class="btn-base btn-action text-[10px] px-2 py-1" ${state.coins < s.price ? 'disabled' : ''}>BUY</button>
+                            <button onclick="trade('${s.id}', 'max')" class="btn-base btn-action text-[10px] px-2 py-1" ${state.coins < s.price ? 'disabled' : ''}>MAX</button>
+                            <button onclick="trade('${s.id}', -1)" class="btn-base border border-red-500 text-red-500 hover:bg-red-900/30 text-[10px] px-2 py-1" ${s.owned <= 0 ? 'disabled' : ''}>SELL</button>
+                        </div>
+                    </div>
+                `;
+                marketContainer.appendChild(div);
+            });
+            document.getElementById('ui-portfolio-val').innerText = formatCoins(portVal);
+        }
+
+        window.trade = function(id, action) {
+            initAudio();
+            const s = state.market[id];
+            if(!s) return;
+            const currentCoins = Math.floor(state.coins);
+
+            if (action === 1 && currentCoins >= s.price) {
+                state.coins -= s.price;
+                s.owned++;
+            } else if (action === 'max') {
+                const maxShares = Math.floor(currentCoins / s.price);
+                if(maxShares > 0) {
+                    state.coins -= (maxShares * s.price);
+                    s.owned += maxShares;
+                }
+            } else if (action === -1 && s.owned > 0) {
+                state.coins += (s.owned * s.price);
+                s.owned = 0;
+            }
+            updateUI(); 
+        };
+
+        function marketLoop() {
+            let needsRender = false;
+            Object.values(state.market).forEach(s => {
+                s.crashed = false; 
+                
+                if (s.isMooning) {
+                    // Crash back to roughly base
+                    s.price = Math.max(1, Math.floor(s.base * (Math.random() * 0.5 + 0.8)));
+                    s.isMooning = false;
+                    s.crashed = true;
+                    addLog(`${s.name} crashed back to baseline.`, 'sys');
+                    needsRender = true;
+                } else {
+                    // 0.5% chance to moon
+                    if (Math.random() < 0.005) {
+                        const mult = Math.floor(Math.random() * 50) + 10; // 10x to 60x moon
+                        s.price = Math.floor(s.base * mult);
+                        s.isMooning = true;
+                        addLog(`!!! ${s.name} IS MOONING !!!`, 'win');
+                        playSound('claim');
+                        needsRender = true;
+                    } else {
+                        // Normal fluctuation (+/- 15%)
+                        const shift = (Math.random() * 0.3) - 0.15;
+                        let newP = s.price + (s.base * shift);
+                        if(newP > s.base * 2.5) newP *= 0.9;
+                        if(newP < s.base * 0.3) newP *= 1.1;
+                        s.price = Math.max(1, Math.floor(newP));
+                        needsRender = true;
+                    }
+                }
+            });
+            if(needsRender) {
+                renderMarket();
+                updateUI();
+            }
+        }
+
+        setInterval(marketLoop, 2500);
+
+        // Side Quest (Whack-a-Mole)
+        let moleActive = false;
+        let moleScore = 0;
+        let moleTimer;
+        let moleTimeout;
+        const moleGrid = document.getElementById('mole-grid');
+        const moleHoles = document.querySelectorAll('.mole-hole');
+        const modal = document.getElementById('quest-modal');
+        const moleStatus = document.getElementById('mole-status');
+        const moleScoreDisplay = document.getElementById('mole-score');
+        const btnStartMole = document.getElementById('btn-start-mole');
+
+        window.openSideQuest = function() {
+            if(state.coins > 0) return;
+            modal.classList.remove('hidden');
+            moleScore = 0;
+            moleScoreDisplay.innerText = moleScore;
+            moleStatus.innerText = `Hits: 0/5`;
+            btnStartMole.style.display = 'block';
+            moleGrid.style.pointerEvents = 'none';
+        }
+
+        window.startMoleGame = function() {
+            initAudio();
+            btnStartMole.style.display = 'none';
+            moleGrid.style.pointerEvents = 'auto';
+            moleScore = 0;
+            moleScoreDisplay.innerText = moleScore;
+            moleActive = true;
+            nextMole();
+            
+            // 5 second timer to win
+            moleTimer = setTimeout(() => {
+                if(moleActive) {
+                    endMoleGame(false);
+                }
+            }, 5000);
+        }
+
+        function nextMole() {
+            moleHoles.forEach(h => h.classList.remove('active'));
+            if(!moleActive) return;
+            const r = Math.floor(Math.random() * 9);
+            moleHoles[r].classList.add('active');
+            
+            // Mole disappears fast if not clicked
+            clearTimeout(moleTimeout);
+            moleTimeout = setTimeout(() => {
+                if(moleActive) nextMole();
+            }, 600);
+        }
+
+        moleHoles.forEach(hole => {
+            hole.addEventListener('mousedown', (e) => {
+                if(!moleActive) return;
+                if(e.target.classList.contains('active')) {
+                    playTone(600, 'sine', 0.1);
+                    e.target.classList.remove('active');
+                    moleScore++;
+                    moleScoreDisplay.innerText = moleScore;
+                    if(moleScore >= 5) {
+                        endMoleGame(true);
+                    } else {
+                        nextMole();
+                    }
+                }
+            });
+        });
+
+        function endMoleGame(won) {
+            moleActive = false;
+            clearTimeout(moleTimer);
+            clearTimeout(moleTimeout);
+            moleGrid.style.pointerEvents = 'none';
+            moleHoles.forEach(h => h.classList.remove('active'));
+
+            if(won) {
+                const reward = Math.floor(Math.random() * 451) + 50; // 50 to 500
+                moleStatus.innerHTML = `<span class="text-[var(--cy-green)]">SUCCESS! +${reward} Coins</span>`;
+                playSound('claim');
+                setTimeout(() => {
+                    state.coins += reward;
+                    addLog(`Reboot successful. Recovered ${reward} Coins.`, 'sys');
+                    modal.classList.add('hidden');
+                    updateUI();
+                }, 2000);
+            } else {
+                moleStatus.innerHTML = `<span class="text-[var(--cy-pink)]">FAILED. TOO SLOW.</span>`;
+                playSound('lose');
+                setTimeout(() => {
+                    btnStartMole.innerText = "RETRY";
+                    btnStartMole.style.display = 'block';
+                }, 1500);
+            }
+        }
+
+        // --- Main UI Updater ---
+        function updateUI() {
+            uiCoins.innerText = formatCoins(state.coins);
+            
+            const baseBet = parseInput(inputBet.value);
+            const totalBet = baseBet * state.multiplier;
+            uiTotalRisk.innerText = formatCoins(totalBet);
+            
+            // Check if player has enough for bet
+            btnGamble.disabled = (totalBet <= 0 || totalBet > state.coins);
+
+            // Upgrades & Effective Luck
+            const effectiveChance = getEffectiveChance();
+            uiWinChance.innerText = effectiveChance + '%';
+            uiLuckStatus.innerText = state.winChance + '%'; // display base luck
+            
+            if (state.winChance >= state.maxWinChance) {
+                uiUpgradeCost.innerText = "MAX (70%)";
+                btnUpgrade.disabled = true;
+            } else {
+                const cost = getUpgradeCost();
+                uiUpgradeCost.innerText = `Cost: ${formatCoins(cost)}`;
+                btnUpgrade.disabled = (state.coins < cost);
+            }
+            
+            // Broke status
+            if (state.coins <= 0) {
+                btnSideQuest.classList.remove('hidden');
+            } else {
+                btnSideQuest.classList.add('hidden');
+            }
+            
+            renderTitles();
+            renderMarket();
+            checkQuests();
+        }
+
+        // --- Matrix BG ---
+        const c = document.getElementById('matrix-bg');
+        const ctx = c.getContext('2d');
+        let cols, drops;
+        function initMatrix() {
+            c.width = window.innerWidth;
+            c.height = window.innerHeight;
+            cols = Math.floor(c.width / 14);
+            drops = Array(cols).fill(0).map(() => Math.random() * -100);
+        }
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.1)'; 
+            ctx.fillRect(0, 0, c.width, c.height);
+            ctx.fillStyle = '#00ff66'; 
+            ctx.font = '14px monospace';
+            
+            for(let i=0; i<drops.length; i++) {
+                const text = String.fromCharCode(Math.floor(Math.random() * 96) + 0x30A0);
+                ctx.fillText(text, i * 14, drops[i] * 14);
+                if(drops[i] * 14 > c.height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+            requestAnimationFrame(drawMatrix);
+        }
+        window.addEventListener('resize', initMatrix);
+
+        // Boot
+        initMatrix();
+        drawMatrix();
+        renderTitles();
+        renderQuests();
+        updateUI();
+
+    </script>
+</body>
+</html>
